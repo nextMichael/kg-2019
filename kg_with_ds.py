@@ -6,8 +6,9 @@ import json
 import numpy as np
 from random import choice
 from tqdm import tqdm
-import pyhanlp
-from gensim.models import Word2Vec
+# import pyhanlp
+import jieba
+from gensim.models import KeyedVectors
 import re, os
 import ahocorasick
 
@@ -17,7 +18,7 @@ char_size = 128
 maxlen = 512
 
 
-word2vec = Word2Vec.load('../word2vec_baike/word2vec_baike')
+word2vec = KeyedVectors.load_word2vec_format('word2vec/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5', binary=False)
 
 
 id2word = {i+1:j for i,j in enumerate(word2vec.wv.index2word)}
@@ -28,7 +29,8 @@ word2vec = np.concatenate([np.zeros((1, word_size)), word2vec])
 
 
 def tokenize(s):
-    return [i.word for i in pyhanlp.HanLP.segment(s)]
+    # return [i.word for i in pyhanlp.HanLP.segment(s)]
+    return jieba.lcut(s)
 
 
 def sent2vec(S):
@@ -45,23 +47,23 @@ def sent2vec(S):
     return V
 
 
-total_data = json.load(open('../datasets/train_data_vote_me.json'))
-id2predicate, predicate2id = json.load(open('../datasets/all_50_schemas_me.json'))
+total_data = json.load(open('datasets/train_data_me.json'))
+id2predicate, predicate2id = json.load(open('datasets/all_50_schemas_me.json'))
 id2predicate = {int(i):j for i,j in id2predicate.items()}
-id2char, char2id = json.load(open('../datasets/all_chars_me.json'))
+id2char, char2id = json.load(open('datasets/all_chars_me.json'))
 num_classes = len(id2predicate)
 
 
-if not os.path.exists('../random_order_vote.json'):
-    random_order = range(len(total_data))
+if not os.path.exists('random_order_vote.json'):
+    random_order = list(range(len(total_data)))
     np.random.shuffle(random_order)
     json.dump(
         random_order,
-        open('../random_order_vote.json', 'w'),
+        open('random_order_vote.json', 'w'),
         indent=4
     )
 else:
-    random_order = json.load(open('../random_order_vote.json'))
+    random_order = json.load(open('random_order_vote.json'))
 
 
 train_data = [total_data[j] for i, j in enumerate(random_order) if i % 8 != mode]
@@ -136,12 +138,12 @@ class AC_Unicode:
     def __init__(self):
         self.ac = ahocorasick.Automaton()
     def add_word(self, k, v):
-        k = k.encode('utf-8')
+        # k = k.encode('utf-8')
         return self.ac.add_word(k, v)
     def make_automaton(self):
         return self.ac.make_automaton()
     def iter(self, s):
-        s = s.encode('utf-8')
+        # s = s.encode('utf-8')
         return self.ac.iter(s)
 
 
@@ -190,7 +192,7 @@ class data_generator:
         return self.steps
     def __iter__(self):
         while True:
-            idxs = range(len(self.data))
+            idxs = list(range(len(self.data)))
             np.random.shuffle(idxs)
             T1, T2, S1, S2, K1, K2, O1, O2, PRES, PREO = [], [], [], [], [], [], [], [], [], []
             for i in idxs:
@@ -232,9 +234,15 @@ class data_generator:
                     for j in pre_items:
                         pres[j[0], 0] = 1
                         pres[j[1]-1, 1] = 1
-                    k1, k2 = np.array(items.keys()).T
-                    k1 = choice(k1)
-                    k2 = choice(k2[k2 >= k1])
+                    # print(items)
+                    k1, k2 = np.array(list(items.keys())).T
+                    # print(k1, k2)
+                    if k2[0] >= k1[0]:
+                        k1 = choice(k1)
+                        k2 = choice(k2)
+                    else:
+                        k2 = choice(k1)
+                        k1 = choice(k1)
                     o1, o2 = np.zeros((len(text), num_classes)), np.zeros((len(text), num_classes))
                     for j in items.get((k1, k2), []):
                         o1[j[0], j[2]] = 1
@@ -463,7 +471,7 @@ def get_k_inter(x, n=6):
     return k_inter
 
 k = Lambda(get_k_inter, output_shape=(6, t_dim))([t, k1, k2])
-k = Bidirectional(CuDNNGRU(t_dim))(k)
+k = Bidirectional(LSTM(t_dim))(k)
 k1v = position_embedding(Lambda(position_id)([t, k1]))
 k2v = position_embedding(Lambda(position_id)([t, k2]))
 kv = Concatenate()([k1v, k2v])

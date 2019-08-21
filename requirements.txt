@@ -1,0 +1,2 @@
+Keras==2.2.4
+pyahocorasick==1.4.0

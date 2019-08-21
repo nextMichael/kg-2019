@@ -6,8 +6,8 @@ import json
 import numpy as np
 from random import choice
 from tqdm import tqdm
-# import pyhanlp
-import jieba
+import pyhanlp
+# import jieba
 from gensim.models import KeyedVectors
 import re, os
 import ahocorasick
@@ -29,8 +29,8 @@ word2vec = np.concatenate([np.zeros((1, word_size)), word2vec])
 
 
 def tokenize(s):
-    # return [i.word for i in pyhanlp.HanLP.segment(s)]
-    return jieba.lcut(s)
+    return [i.word for i in pyhanlp.HanLP.segment(s)]
+    # return jieba.lcut(s)
 
 
 def sent2vec(S):

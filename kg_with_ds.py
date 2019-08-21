@@ -471,7 +471,7 @@ def get_k_inter(x, n=6):
     return k_inter
 
 k = Lambda(get_k_inter, output_shape=(6, t_dim))([t, k1, k2])
-k = Bidirectional(LSTM(t_dim))(k)
+k = Bidirectional(GRU(t_dim))(k)
 k1v = position_embedding(Lambda(position_id)([t, k1]))
 k2v = position_embedding(Lambda(position_id)([t, k2]))
 kv = Concatenate()([k1v, k2v])
@@ -683,7 +683,7 @@ class Evaluate(Callback):
                     dict(zip(orders, spo)) for spo in T - R
                 ]
             }, ensure_ascii=False, indent=4)
-            F.write(s.encode('utf-8') + '\n')
+            F.write(s + '\n')
         F.close()
         return 2 * A / (B + C), A / B, A / C
 
@@ -701,7 +701,7 @@ def test(test_data):
                 dict(zip(orders, spo + ('', ''))) for spo in R
             ]
         }, ensure_ascii=False)
-        F.write(s.encode('utf-8') + '\n')
+        F.write(s + '\n')
     F.close()
 
 

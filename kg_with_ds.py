@@ -7,22 +7,19 @@ import numpy as np
 from random import choice
 from tqdm import tqdm
 import pyhanlp
-# import jieba
 from gensim.models import KeyedVectors
 import re, os
 import ahocorasick
-
 
 mode = 0
 char_size = 128
 maxlen = 512
 
+word2vec = KeyedVectors.load_word2vec_format('word2vec/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5',
+                                             binary=False)
 
-word2vec = KeyedVectors.load_word2vec_format('word2vec/sgns.target.word-word.dynwin5.thr10.neg5.dim300.iter5', binary=False)
-
-
-id2word = {i+1:j for i,j in enumerate(word2vec.wv.index2word)}
-word2id = {j:i for i,j in id2word.items()}
+id2word = {i + 1: j for i, j in enumerate(word2vec.wv.index2word)}
+word2id = {j: i for i, j in id2word.items()}
 word2vec = word2vec.wv.syn0
 word_size = word2vec.shape[1]
 word2vec = np.concatenate([np.zeros((1, word_size)), word2vec])
@@ -30,7 +27,6 @@ word2vec = np.concatenate([np.zeros((1, word_size)), word2vec])
 
 def tokenize(s):
     return [i.word for i in pyhanlp.HanLP.segment(s)]
-    # return jieba.lcut(s)
 
 
 def sent2vec(S):
@@ -49,10 +45,9 @@ def sent2vec(S):
 
 total_data = json.load(open('datasets/train_data_me.json'))
 id2predicate, predicate2id = json.load(open('datasets/all_50_schemas_me.json'))
-id2predicate = {int(i):j for i,j in id2predicate.items()}
+id2predicate = {int(i): j for i, j in id2predicate.items()}
 id2char, char2id = json.load(open('datasets/all_chars_me.json'))
 num_classes = len(id2predicate)
-
 
 if not os.path.exists('random_order_vote.json'):
     random_order = list(range(len(total_data)))
@@ -65,12 +60,10 @@ if not os.path.exists('random_order_vote.json'):
 else:
     random_order = json.load(open('random_order_vote.json'))
 
-
 train_data = [total_data[j] for i, j in enumerate(random_order) if i % 8 != mode]
 dev_data = [total_data[j] for i, j in enumerate(random_order) if i % 8 == mode]
 
-
-predicates = {} # 格式：{predicate: [(subject, predicate, object)]}
+predicates = {}  # 格式：{predicate: [(subject, predicate, object)]}
 
 
 def repair(d):
@@ -80,17 +73,17 @@ def repair(d):
     zhuanji = []
     gequ = []
     for sp in d['spo_list']:
-        sp[0] = sp[0].strip(u'《》').strip().lower()
-        sp[2] = sp[2].strip(u'《》').strip().lower()
+        sp[0] = sp[0].strip('《》').strip().lower()
+        sp[2] = sp[2].strip('《》').strip().lower()
         for some in something:
             if sp[0] in some and d['text'].count(sp[0]) == 1:
                 sp[0] = some
-        if sp[1] == u'所属专辑':
+        if sp[1] == '所属专辑':
             zhuanji.append(sp[2])
             gequ.append(sp[0])
     spo_list = []
     for sp in d['spo_list']:
-        if sp[1] in [u'歌手', u'作词', u'作曲']:
+        if sp[1] in ['歌手', '作词', '作曲']:
             if sp[0] in zhuanji and sp[0] not in gequ:
                 continue
         spo_list.append(tuple(sp))
@@ -103,7 +96,6 @@ for d in train_data:
         if sp[1] not in predicates:
             predicates[sp[1]] = []
         predicates[sp[1]].append(sp)
-
 
 for d in dev_data:
     repair(d)
@@ -135,13 +127,17 @@ def seq_padding(X, padding=0):
 class AC_Unicode:
     """稍微封装一下，弄个支持unicode的AC自动机
     """
+
     def __init__(self):
         self.ac = ahocorasick.Automaton()
+
     def add_word(self, k, v):
         # k = k.encode('utf-8')
         return self.ac.add_word(k, v)
+
     def make_automaton(self):
         return self.ac.make_automaton()
+
     def iter(self, s):
         # s = s.encode('utf-8')
         return self.ac.iter(s)
@@ -153,7 +149,7 @@ class spo_searcher:
         self.o_ac = AC_Unicode()
         self.sp2o = {}
         self.spo_total = {}
-        for i, d in tqdm(enumerate(train_data), desc=u'构建三元组搜索器'):
+        for i, d in tqdm(enumerate(train_data), desc='构建三元组搜索器'):
             for s, p, o in d['spo_list']:
                 self.s_ac.add_word(s, s)
                 self.o_ac.add_word(o, o)
@@ -165,6 +161,7 @@ class spo_searcher:
                 self.spo_total[(s, p, o)].add(i)
         self.s_ac.make_automaton()
         self.o_ac.make_automaton()
+
     def extract_items(self, text_in, text_idx=None):
         R = set()
         for s in self.s_ac.iter(text_in):
@@ -188,15 +185,17 @@ class data_generator:
         self.steps = len(self.data) // self.batch_size
         if len(self.data) % self.batch_size != 0:
             self.steps += 1
+
     def __len__(self):
         return self.steps
+
     def __iter__(self):
         while True:
             idxs = list(range(len(self.data)))
             np.random.shuffle(idxs)
             T1, T2, S1, S2, K1, K2, O1, O2, PRES, PREO = [], [], [], [], [], [], [], [], [], []
             for i in idxs:
-                spo_list_key = 'spo_list' # if np.random.random() > 0.5 else 'spo_list_with_pred'
+                spo_list_key = 'spo_list'  # if np.random.random() > 0.5 else 'spo_list_with_pred'
                 d = random_generate(self.data[i], spo_list_key)
                 text = d['text'][:maxlen]
                 text_words = tokenize(text)
@@ -206,34 +205,34 @@ class data_generator:
                     subjectid = text.find(sp[0])
                     objectid = text.find(sp[2])
                     if subjectid != -1 and objectid != -1:
-                        key = (subjectid, subjectid+len(sp[0]))
+                        key = (subjectid, subjectid + len(sp[0]))
                         if key not in items:
                             items[key] = []
                         items[key].append((objectid,
-                                           objectid+len(sp[2]),
+                                           objectid + len(sp[2]),
                                            predicate2id[sp[1]]))
                 pre_items = {}
                 for sp in spoer.extract_items(text, i):
                     subjectid = text.find(sp[0])
                     objectid = text.find(sp[2])
                     if subjectid != -1 and objectid != -1:
-                        key = (subjectid, subjectid+len(sp[0]))
+                        key = (subjectid, subjectid + len(sp[0]))
                         if key not in pre_items:
                             pre_items[key] = []
                         pre_items[key].append((objectid,
-                                               objectid+len(sp[2]),
+                                               objectid + len(sp[2]),
                                                predicate2id[sp[1]]))
                 if items:
-                    T1.append([char2id.get(c, 1) for c in text]) # 1是unk，0是padding
+                    T1.append([char2id.get(c, 1) for c in text])  # 1是unk，0是padding
                     T2.append(text_words)
                     s1, s2 = np.zeros(len(text)), np.zeros(len(text))
                     for j in items:
                         s1[j[0]] = 1
-                        s2[j[1]-1] = 1
+                        s2[j[1] - 1] = 1
                     pres = np.zeros((len(text), 2))
                     for j in pre_items:
                         pres[j[0], 0] = 1
-                        pres[j[1]-1, 1] = 1
+                        pres[j[1] - 1, 1] = 1
                     # print(items)
                     k1, k2 = np.array(list(items.keys())).T
                     # print(k1, k2)
@@ -246,16 +245,16 @@ class data_generator:
                     o1, o2 = np.zeros((len(text), num_classes)), np.zeros((len(text), num_classes))
                     for j in items.get((k1, k2), []):
                         o1[j[0], j[2]] = 1
-                        o2[j[1]-1, j[2]] = 1
+                        o2[j[1] - 1, j[2]] = 1
                     preo = np.zeros((len(text), num_classes, 2))
                     for j in pre_items.get((k1, k2), []):
                         preo[j[0], j[2], 0] = 1
-                        preo[j[1]-1, j[2], 1] = 1
+                        preo[j[1] - 1, j[2], 1] = 1
                     preo = preo.reshape((len(text), -1))
                     S1.append(s1)
                     S2.append(s2)
                     K1.append([k1])
-                    K2.append([k2-1])
+                    K2.append([k2 - 1])
                     O1.append(o1)
                     O2.append(o2)
                     PRES.append(pres)
@@ -279,7 +278,6 @@ from keras.models import Model
 import keras.backend as K
 from keras.callbacks import Callback
 from keras.optimizers import Adam
-
 
 if __name__ == '__main__':
     config = K.tf.ConfigProto()
@@ -315,7 +313,8 @@ def dilated_gated_conv1d(seq, mask, dilation_rate=1):
     """膨胀门卷积（残差式）
     """
     dim = K.int_shape(seq)[-1]
-    h = Conv1D(dim*2, 3, padding='same', dilation_rate=dilation_rate)(seq)
+    h = Conv1D(dim * 2, 3, padding='same', dilation_rate=dilation_rate)(seq)
+
     def _gate(x):
         dropout_rate = 0.1
         s, h = x
@@ -323,6 +322,7 @@ def dilated_gated_conv1d(seq, mask, dilation_rate=1):
         g = K.in_train_phase(K.dropout(g, dropout_rate), g)
         g = K.sigmoid(g)
         return g * s + (1 - g) * h
+
     seq = Lambda(_gate)([seq, h])
     seq = Lambda(lambda x: x[0] * x[1])([seq, mask])
     return seq
@@ -331,11 +331,13 @@ def dilated_gated_conv1d(seq, mask, dilation_rate=1):
 class Attention(Layer):
     """多头注意力机制
     """
+
     def __init__(self, nb_head, size_per_head, **kwargs):
         self.nb_head = nb_head
         self.size_per_head = size_per_head
         self.out_dim = nb_head * size_per_head
         super(Attention, self).__init__(**kwargs)
+
     def build(self, input_shape):
         super(Attention, self).build(input_shape)
         q_in_dim = input_shape[0][-1]
@@ -350,6 +352,7 @@ class Attention(Layer):
         self.v_kernel = self.add_weight(name='w_kernel',
                                         shape=(v_in_dim, self.out_dim),
                                         initializer='glorot_normal')
+
     def mask(self, x, mask, mode='mul'):
         if mask is None:
             return x
@@ -360,6 +363,7 @@ class Attention(Layer):
                 return x * mask
             else:
                 return x - (1 - mask) * 1e10
+
     def call(self, inputs):
         q, k, v = inputs[:3]
         v_mask, q_mask = None, None
@@ -380,7 +384,7 @@ class Attention(Layer):
         kw = K.permute_dimensions(kw, (0, 2, 1, 3))
         vw = K.permute_dimensions(vw, (0, 2, 1, 3))
         # Attention
-        a = K.batch_dot(qw, kw, [3, 3]) / self.size_per_head**0.5
+        a = K.batch_dot(qw, kw, [3, 3]) / self.size_per_head ** 0.5
         a = K.permute_dimensions(a, (0, 3, 2, 1))
         a = self.mask(a, v_mask, 'add')
         a = K.permute_dimensions(a, (0, 3, 2, 1))
@@ -391,6 +395,7 @@ class Attention(Layer):
         o = K.reshape(o, (-1, K.shape(o)[1], self.out_dim))
         o = self.mask(o, q_mask, 'mul')
         return o
+
     def compute_output_shape(self, input_shape):
         return (input_shape[0][0], input_shape[0][1], self.out_dim)
 
@@ -409,6 +414,7 @@ preo_in = Input(shape=(None, num_classes * 2))
 t1, t2, s1, s2, k1, k2, o1, o2, pres, preo = t1_in, t2_in, s1_in, s2_in, k1_in, k2_in, o1_in, o2_in, pres_in, preo_in
 mask = Lambda(lambda x: K.cast(K.greater(K.expand_dims(x, 2), 0), 'float32'))(t1)
 
+
 def position_id(x):
     if isinstance(x, list) and len(x) == 2:
         x, r = x
@@ -419,13 +425,14 @@ def position_id(x):
     pid = K.tile(pid, [K.shape(x)[0], 1])
     return K.abs(pid - K.cast(r, 'int32'))
 
+
 pid = Lambda(position_id)(t1)
 position_embedding = Embedding(maxlen, char_size, embeddings_initializer='zeros')
 pv = position_embedding(pid)
 
-t1 = Embedding(len(char2id)+2, char_size)(t1) # 0: padding, 1: unk
-t2 = Dense(char_size, use_bias=False)(t2) # 词向量也转为同样维度
-t = Add()([t1, t2, pv]) # 字向量、词向量、位置向量相加
+t1 = Embedding(len(char2id) + 2, char_size)(t1)  # 0: padding, 1: unk
+t2 = Dense(char_size, use_bias=False)(t2)  # 词向量也转为同样维度
+t = Add()([t1, t2, pv])  # 字向量、词向量、位置向量相加
 t = Dropout(0.25)(t)
 t = Lambda(lambda x: x[0] * x[1])([t, mask])
 t = dilated_gated_conv1d(t, mask, 1)
@@ -455,12 +462,12 @@ ps2 = Dense(1, activation='sigmoid')(h)
 ps1 = Lambda(lambda x: x[0] * x[1])([ps1, pn1])
 ps2 = Lambda(lambda x: x[0] * x[1])([ps2, pn2])
 
-subject_model = Model([t1_in, t2_in, pres_in], [ps1, ps2]) # 预测subject的模型
-
+subject_model = Model([t1_in, t2_in, pres_in], [ps1, ps2])  # 预测subject的模型
 
 t_max = Lambda(seq_maxpool)([t, mask])
 pc = Dense(char_size, activation='relu')(t_max)
 pc = Dense(num_classes, activation='sigmoid')(pc)
+
 
 def get_k_inter(x, n=6):
     seq, k1, k2 = x
@@ -469,6 +476,7 @@ def get_k_inter(x, n=6):
     k_inter = [K.expand_dims(k, 1) for k in k_inter]
     k_inter = K.concatenate(k_inter, 1)
     return k_inter
+
 
 k = Lambda(get_k_inter, output_shape=(6, t_dim))([t, k1, k2])
 k = Bidirectional(GRU(t_dim))(k)
@@ -486,8 +494,7 @@ po2 = Dense(num_classes, activation='sigmoid')(h)
 po1 = Lambda(lambda x: x[0] * x[1] * x[2] * x[3])([po, po1, pc, pn1])
 po2 = Lambda(lambda x: x[0] * x[1] * x[2] * x[3])([po, po2, pc, pn2])
 
-object_model = Model([t1_in, t2_in, k1_in, k2_in, pres_in, preo_in], [po1, po2]) # 输入text和subject，预测object及其关系
-
+object_model = Model([t1_in, t2_in, k1_in, k2_in, pres_in, preo_in], [po1, po2])  # 输入text和subject，预测object及其关系
 
 train_model = Model([t1_in, t2_in, s1_in, s2_in, k1_in, k2_in, o1_in, o2_in, pres_in, preo_in],
                     [ps1, ps2, po1, po2])
@@ -517,10 +524,12 @@ class ExponentialMovingAverage:
     用法：在model.compile之后、第一次训练之前使用；
     先初始化对象，然后执行inject方法。
     """
+
     def __init__(self, model, momentum=0.9999):
         self.momentum = momentum
         self.model = model
         self.ema_weights = [K.zeros(K.shape(w)) for w in model.weights]
+
     def inject(self):
         """添加更新算子到model.metrics_updates。
         """
@@ -528,17 +537,20 @@ class ExponentialMovingAverage:
         for w1, w2 in zip(self.ema_weights, self.model.weights):
             op = K.moving_average_update(w1, w2, self.momentum)
             self.model.metrics_updates.append(op)
+
     def initialize(self):
         """ema_weights初始化跟原模型初始化一致。
         """
         self.old_weights = K.batch_get_value(self.model.weights)
         K.batch_set_value(zip(self.ema_weights, self.old_weights))
+
     def apply_ema_weights(self):
         """备份原模型权重，然后将平均权重应用到模型上去。
         """
         self.old_weights = K.batch_get_value(self.model.weights)
         ema_weights = K.batch_get_value(self.ema_weights)
         K.batch_set_value(zip(self.model.weights, ema_weights))
+
     def reset_old_weights(self):
         """恢复模型到旧权重。
         """
@@ -557,16 +569,16 @@ def extract_items(text_in):
         subjectid = text_in.find(sp[0])
         objectid = text_in.find(sp[2])
         if subjectid != -1 and objectid != -1:
-            key = (subjectid, subjectid+len(sp[0]))
+            key = (subjectid, subjectid + len(sp[0]))
             if key not in pre_items:
                 pre_items[key] = []
             pre_items[key].append((objectid,
-                                   objectid+len(sp[2]),
+                                   objectid + len(sp[2]),
                                    predicate2id[sp[1]]))
     _pres = np.zeros((len(text_in), 2))
     for j in pre_items:
         _pres[j[0], 0] = 1
-        _pres[j[1]-1, 1] = 1
+        _pres[j[1] - 1, 1] = 1
     _pres = np.expand_dims(_pres, 0)
     R = []
     _t1 = [char2id.get(c, 1) for c in text_in]
@@ -580,12 +592,12 @@ def extract_items(text_in):
         j = _k2[_k2 >= i]
         if len(j) > 0:
             j = j[0]
-            _subject = text_in[i: j+1]
+            _subject = text_in[i: j + 1]
             _subjects.append((_subject, i, j))
             _preo = np.zeros((len(text_in), num_classes, 2))
-            for _ in pre_items.get((i, j+1), []):
+            for _ in pre_items.get((i, j + 1), []):
                 _preo[_[0], _[2], 0] = 1
-                _preo[_[1]-1, _[2], 1] = 1
+                _preo[_[1] - 1, _[2], 1] = 1
             _preo = _preo.reshape((len(text_in), -1))
             _PREO.append(_preo)
     if _subjects:
@@ -595,27 +607,27 @@ def extract_items(text_in):
         _t2 = np.repeat(_t2, len(_subjects), 0)
         _k1, _k2 = np.array([_s[1:] for _s in _subjects]).T.reshape((2, -1, 1))
         _o1, _o2 = object_model.predict([_t1, _t2, _k1, _k2, _PRES, _PREO])
-        for i,_subject in enumerate(_subjects):
+        for i, _subject in enumerate(_subjects):
             _oo1, _oo2 = np.where(_o1[i] > 0.5), np.where(_o2[i] > 0.4)
             for _ooo1, _c1 in zip(*_oo1):
                 for _ooo2, _c2 in zip(*_oo2):
                     if _ooo1 <= _ooo2 and _c1 == _c2:
-                        _object = text_in[_ooo1: _ooo2+1]
+                        _object = text_in[_ooo1: _ooo2 + 1]
                         _predicate = id2predicate[_c1]
                         R.append((_subject[0], _predicate, _object))
                         break
         zhuanji, gequ = [], []
         for s, p, o in R[:]:
-            if p == u'妻子':
-                R.append((o, u'丈夫', s))
-            elif p == u'丈夫':
-                R.append((o, u'妻子', s))
-            if p == u'所属专辑':
+            if p == '妻子':
+                R.append((o, '丈夫', s))
+            elif p == '丈夫':
+                R.append((o, '妻子', s))
+            if p == '所属专辑':
                 zhuanji.append(o)
                 gequ.append(s)
         spo_list = set()
         for s, p, o in R:
-            if p in [u'歌手', u'作词', u'作曲']:
+            if p in ['歌手', '作词', '作曲']:
                 if s in zhuanji and s not in gequ:
                     continue
             spo_list.add((s, p, o))
@@ -630,6 +642,7 @@ class Evaluate(Callback):
         self.best = 0.
         self.passed = 0
         self.stage = 0
+
     def on_batch_begin(self, batch, logs=None):
         """第一个epoch用来warmup，不warmup有不收敛的可能。
         """
@@ -637,6 +650,7 @@ class Evaluate(Callback):
             lr = (self.passed + 1.) / self.params['steps'] * 1e-3
             K.set_value(self.model.optimizer.lr, lr)
             self.passed += 1
+
     def on_epoch_end(self, epoch, logs=None):
         EMAer.apply_ema_weights()
         f1, precision, recall = self.evaluate()
@@ -647,8 +661,8 @@ class Evaluate(Callback):
         print('f1: %.4f, precision: %.4f, recall: %.4f, best f1: %.4f\n' % (f1, precision, recall, self.best))
         EMAer.reset_old_weights()
         if epoch + 1 == 50 or (
-            self.stage == 0 and epoch > 10 and
-            (f1 < 0.5 or np.argmax(self.F1) < len(self.F1) - 8)
+                self.stage == 0 and epoch > 10 and
+                (f1 < 0.5 or np.argmax(self.F1) < len(self.F1) - 8)
         ):
             self.stage = 1
             train_model.load_weights('best_model.weights')
@@ -658,6 +672,7 @@ class Evaluate(Callback):
             opt_weights = K.batch_get_value(self.model.optimizer.weights)
             opt_weights = [w * 0. for w in opt_weights]
             K.batch_set_value(zip(self.model.optimizer.weights, opt_weights))
+
     def evaluate(self):
         orders = ['subject', 'predicate', 'object']
         A, B, C = 1e-10, 1e-10, 1e-10
@@ -707,7 +722,6 @@ def test(test_data):
 
 train_D = data_generator(train_data)
 evaluator = Evaluate()
-
 
 if __name__ == '__main__':
     train_model.fit_generator(train_D.__iter__(),

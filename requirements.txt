@@ -1,2 +1,6 @@
+numpy==1.16.2
 Keras==2.2.4
+pyhanlp==0.1.48
 pyahocorasick==1.4.0
+gensim==3.7.1
+tqdm==4.32.1

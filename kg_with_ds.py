@@ -1,15 +1,21 @@
 #! -*- coding:utf-8 -*-
-
-
 from __future__ import print_function
+import os
+import re
 import json
+import pyhanlp
+import ahocorasick
 import numpy as np
 from random import choice
 from tqdm import tqdm
-import pyhanlp
 from gensim.models import KeyedVectors
-import re, os
-import ahocorasick
+
+from keras.layers import *
+from keras.models import Model
+import keras.backend as K
+from keras.callbacks import Callback
+from keras.optimizers import Adam
+
 
 mode = 0
 char_size = 128
@@ -68,7 +74,7 @@ predicates = {}  # 格式：{predicate: [(subject, predicate, object)]}
 
 def repair(d):
     d['text'] = d['text'].lower()
-    something = re.findall(u'《([^《》]*?)》', d['text'])
+    something = re.findall('《([^《》]*?)》', d['text'])
     something = [s.strip() for s in something]
     zhuanji = []
     gequ = []
@@ -272,12 +278,6 @@ class data_generator:
                         yield [T1, T2, S1, S2, K1, K2, O1, O2, PRES, PREO], None
                         T1, T2, S1, S2, K1, K2, O1, O2, PRES, PREO = [], [], [], [], [], [], [], [], [], []
 
-
-from keras.layers import *
-from keras.models import Model
-import keras.backend as K
-from keras.callbacks import Callback
-from keras.optimizers import Adam
 
 if __name__ == '__main__':
     config = K.tf.ConfigProto()

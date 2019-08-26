@@ -15,6 +15,7 @@ from keras.models import Model
 import keras.backend as K
 from keras.callbacks import Callback
 from keras.optimizers import Adam
+from keras_radam import RAdam
 
 
 mode = 0
@@ -515,7 +516,7 @@ o2_loss = K.sum(o2_loss * mask) / K.sum(mask)
 loss = (s1_loss + s2_loss) + (o1_loss + o2_loss)
 
 train_model.add_loss(loss)
-train_model.compile(optimizer=Adam(1e-3))
+train_model.compile(optimizer=RAdam(1e-3))
 train_model.summary()
 
 

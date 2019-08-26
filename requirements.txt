@@ -4,3 +4,4 @@ pyhanlp==0.1.48
 pyahocorasick==1.4.0
 gensim==3.7.1
 tqdm==4.32.1
+keras-rectified-adam==0.9.0

@@ -5,5 +5,5 @@ pyahocorasick==1.4.1
 jieba暂时代替hannlp
 
 # todo list
-先复现苏大神的f1
+先复现苏大神的f1(dev目前0.84-0.85左右)
 有时间再想办法优化
